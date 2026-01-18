@@ -3,7 +3,7 @@
  * Plugin Name: MCP Abilities - Google Workspace
  * Plugin URI: https://github.com/bjornfix/mcp-abilities-workspace
  * Description: Google Workspace Gmail API abilities for MCP. Service account only, inbox management, send/receive emails.
- * Version: 2.0.2
+ * Version: 2.0.3
  * Author: Devenia
  * Author URI: https://devenia.com
  * License: GPL-2.0+
@@ -20,6 +20,13 @@ declare( strict_types=1 );
 // Prevent direct access.
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
+}
+
+/**
+ * Permission callback for Workspace abilities.
+ */
+function mcp_workspace_permission_callback(): bool {
+	return current_user_can( 'manage_options' );
 }
 
 // =============================================================================
@@ -53,6 +60,7 @@ class MCP_Gmail_Client {
 		'https://www.googleapis.com/auth/gmail.readonly',
 		'https://www.googleapis.com/auth/gmail.send',
 		'https://www.googleapis.com/auth/gmail.modify',
+		'https://www.googleapis.com/auth/gmail.labels',
 	);
 
 	/**
@@ -61,6 +69,13 @@ class MCP_Gmail_Client {
 	 * @var string|null
 	 */
 	private static ?string $access_token = null;
+
+	/**
+	 * Cached configuration.
+	 *
+	 * @var array|null
+	 */
+	private static ?array $config_cache = null;
 
 	/**
 	 * Token expiration timestamp.
@@ -75,10 +90,16 @@ class MCP_Gmail_Client {
 	 * @return array|null Configuration array or null if not configured.
 	 */
 	public static function get_config(): ?array {
+		if ( null !== self::$config_cache ) {
+			return self::$config_cache;
+		}
+
 		$config = get_option( self::OPTION_NAME, null );
 		if ( empty( $config ) || empty( $config['service_account'] ) || empty( $config['impersonate_email'] ) ) {
+			self::$config_cache = null;
 			return null;
 		}
+		self::$config_cache = $config;
 		return $config;
 	}
 
@@ -92,6 +113,7 @@ class MCP_Gmail_Client {
 		// Clear cached token when config changes.
 		self::$access_token = null;
 		self::$token_expires = 0;
+		self::$config_cache = null;
 		delete_transient( 'mcp_gmail_access_token' );
 
 		return update_option( self::OPTION_NAME, $config, false );
@@ -195,9 +217,17 @@ class MCP_Gmail_Client {
 			return new WP_Error( 'token_request_failed', 'Token request failed: ' . $response->get_error_message() );
 		}
 
-		$body = json_decode( wp_remote_retrieve_body( $response ), true );
+		$code = wp_remote_retrieve_response_code( $response );
+		$body_raw = wp_remote_retrieve_body( $response );
+		$body = json_decode( $body_raw, true );
+		if ( null === $body && '' !== $body_raw ) {
+			$body = array( 'raw' => $body_raw );
+		}
+		if ( ! is_array( $body ) ) {
+			$body = array();
+		}
 
-		if ( empty( $body['access_token'] ) ) {
+		if ( $code >= 400 || empty( $body['access_token'] ) ) {
 			$error = $body['error_description'] ?? $body['error'] ?? 'Unknown error';
 			return new WP_Error( 'token_error', 'Failed to get access token: ' . $error );
 		}
@@ -233,9 +263,9 @@ class MCP_Gmail_Client {
 			return $token;
 		}
 
-		$url = self::API_BASE . '/users/me/' . $endpoint;
+		$url = self::API_BASE . '/users/me/' . ltrim( $endpoint, '/' );
 		if ( ! empty( $query ) ) {
-			$url .= '?' . http_build_query( $query );
+			$url = add_query_arg( $query, $url );
 		}
 
 		$args = array(
@@ -258,10 +288,17 @@ class MCP_Gmail_Client {
 		}
 
 		$code = wp_remote_retrieve_response_code( $response );
-		$data = json_decode( wp_remote_retrieve_body( $response ), true );
+		$body_raw = wp_remote_retrieve_body( $response );
+		$data = json_decode( $body_raw, true );
+		if ( null === $data && '' !== $body_raw ) {
+			$data = array( 'raw' => $body_raw );
+		}
+		if ( ! is_array( $data ) ) {
+			$data = array();
+		}
 
 		if ( $code >= 400 ) {
-			$error = $data['error']['message'] ?? 'API error';
+			$error = $data['error']['message'] ?? $data['error'] ?? 'API error';
 			return new WP_Error( 'api_error', "Gmail API error ($code): $error" );
 		}
 
@@ -477,9 +514,7 @@ function mcp_register_email_abilities(): void {
 					'message' => "Gmail API configured successfully. Impersonating: $impersonate",
 				);
 			},
-			'permission_callback' => function (): bool {
-				return current_user_can( 'manage_options' );
-			},
+			'permission_callback' => 'mcp_workspace_permission_callback',
 			'meta'                => array(
 				'annotations' => array(
 					'readonly'    => false,
@@ -560,14 +595,406 @@ function mcp_register_email_abilities(): void {
 					'message'       => 'Gmail API connected and working.',
 				);
 			},
-			'permission_callback' => function (): bool {
-				return current_user_can( 'manage_options' );
-			},
+			'permission_callback' => 'mcp_workspace_permission_callback',
 			'meta'                => array(
 				'annotations' => array(
 					'readonly'    => true,
 					'destructive' => false,
 					'idempotent'  => true,
+				),
+			),
+		)
+	);
+
+	// =========================================================================
+	// GMAIL - List Labels
+	// =========================================================================
+	wp_register_ability(
+		'gmail/list-labels',
+		array(
+			'label'               => 'List Gmail Labels',
+			'description'         => 'Lists Gmail labels (system and user).',
+			'category'            => 'site',
+			'input_schema'        => array(
+				'type'                 => 'object',
+				'properties'           => array(
+					'types' => array(
+						'type'        => 'array',
+						'items'       => array(
+							'type' => 'string',
+							'enum' => array( 'system', 'user' ),
+						),
+						'description' => 'Optional filter by label types.',
+					),
+				),
+				'additionalProperties' => false,
+			),
+			'output_schema'       => array(
+				'type'       => 'object',
+				'properties' => array(
+					'success' => array( 'type' => 'boolean' ),
+					'labels'  => array( 'type' => 'array' ),
+					'count'   => array( 'type' => 'integer' ),
+					'message' => array( 'type' => 'string' ),
+				),
+			),
+			'execute_callback'    => function ( $input = array() ): array {
+				$input = is_array( $input ) ? $input : array();
+				$query = array();
+
+				if ( ! empty( $input['types'] ) && is_array( $input['types'] ) ) {
+					$query['type'] = array_map( 'sanitize_text_field', $input['types'] );
+				}
+
+				$response = MCP_Gmail_Client::api_request( 'labels', 'GET', array(), $query );
+				if ( is_wp_error( $response ) ) {
+					return array(
+						'success' => false,
+						'message' => $response->get_error_message(),
+					);
+				}
+
+				$labels = $response['labels'] ?? array();
+
+				return array(
+					'success' => true,
+					'labels'  => $labels,
+					'count'   => count( $labels ),
+					'message' => 'Retrieved ' . count( $labels ) . ' label(s).',
+				);
+			},
+			'permission_callback' => 'mcp_workspace_permission_callback',
+			'meta'                => array(
+				'annotations' => array(
+					'readonly'    => true,
+					'destructive' => false,
+					'idempotent'  => true,
+				),
+			),
+		)
+	);
+
+	// =========================================================================
+	// GMAIL - Get Label
+	// =========================================================================
+	wp_register_ability(
+		'gmail/get-label',
+		array(
+			'label'               => 'Get Gmail Label',
+			'description'         => 'Get a single Gmail label by ID.',
+			'category'            => 'site',
+			'input_schema'        => array(
+				'type'                 => 'object',
+				'required'             => array( 'label_id' ),
+				'properties'           => array(
+					'label_id' => array(
+						'type'        => 'string',
+						'description' => 'Label ID (e.g., INBOX, UNREAD, or custom ID).',
+					),
+				),
+				'additionalProperties' => false,
+			),
+			'output_schema'       => array(
+				'type'       => 'object',
+				'properties' => array(
+					'success' => array( 'type' => 'boolean' ),
+					'label'   => array( 'type' => 'object' ),
+					'message' => array( 'type' => 'string' ),
+				),
+			),
+			'execute_callback'    => function ( $input = array() ): array {
+				$label_id = sanitize_text_field( $input['label_id'] ?? '' );
+				if ( empty( $label_id ) ) {
+					return array(
+						'success' => false,
+						'message' => 'label_id is required.',
+					);
+				}
+
+				$response = MCP_Gmail_Client::api_request( 'labels/' . $label_id );
+				if ( is_wp_error( $response ) ) {
+					return array(
+						'success' => false,
+						'message' => $response->get_error_message(),
+					);
+				}
+
+				return array(
+					'success' => true,
+					'label'   => $response,
+					'message' => 'Label retrieved successfully.',
+				);
+			},
+			'permission_callback' => 'mcp_workspace_permission_callback',
+			'meta'                => array(
+				'annotations' => array(
+					'readonly'    => true,
+					'destructive' => false,
+					'idempotent'  => true,
+				),
+			),
+		)
+	);
+
+	// =========================================================================
+	// GMAIL - Create Label
+	// =========================================================================
+	wp_register_ability(
+		'gmail/create-label',
+		array(
+			'label'               => 'Create Gmail Label',
+			'description'         => 'Create a new Gmail label.',
+			'category'            => 'site',
+			'input_schema'        => array(
+				'type'                 => 'object',
+				'required'             => array( 'name' ),
+				'properties'           => array(
+					'name'                  => array(
+						'type'        => 'string',
+						'description' => 'Label name.',
+					),
+					'label_list_visibility' => array(
+						'type'        => 'string',
+						'enum'        => array( 'labelShow', 'labelShowIfUnread', 'labelHide' ),
+						'description' => 'Visibility in label list.',
+					),
+					'message_list_visibility' => array(
+						'type'        => 'string',
+						'enum'        => array( 'show', 'hide' ),
+						'description' => 'Visibility in message list.',
+					),
+					'color'                 => array(
+						'type'        => 'object',
+						'properties'  => array(
+							'textColor'       => array( 'type' => 'string' ),
+							'backgroundColor' => array( 'type' => 'string' ),
+						),
+						'additionalProperties' => false,
+						'description' => 'Optional label colors (hex).',
+					),
+				),
+				'additionalProperties' => false,
+			),
+			'output_schema'       => array(
+				'type'       => 'object',
+				'properties' => array(
+					'success' => array( 'type' => 'boolean' ),
+					'label'   => array( 'type' => 'object' ),
+					'message' => array( 'type' => 'string' ),
+				),
+			),
+			'execute_callback'    => function ( $input = array() ): array {
+				$name = sanitize_text_field( $input['name'] ?? '' );
+				if ( empty( $name ) ) {
+					return array(
+						'success' => false,
+						'message' => 'name is required.',
+					);
+				}
+
+				$body = array( 'name' => $name );
+				if ( ! empty( $input['label_list_visibility'] ) ) {
+					$body['labelListVisibility'] = sanitize_text_field( $input['label_list_visibility'] );
+				}
+				if ( ! empty( $input['message_list_visibility'] ) ) {
+					$body['messageListVisibility'] = sanitize_text_field( $input['message_list_visibility'] );
+				}
+				if ( ! empty( $input['color'] ) && is_array( $input['color'] ) ) {
+					$body['color'] = array(
+						'textColor'       => sanitize_text_field( $input['color']['textColor'] ?? '' ),
+						'backgroundColor' => sanitize_text_field( $input['color']['backgroundColor'] ?? '' ),
+					);
+				}
+
+				$response = MCP_Gmail_Client::api_request( 'labels', 'POST', $body );
+				if ( is_wp_error( $response ) ) {
+					return array(
+						'success' => false,
+						'message' => $response->get_error_message(),
+					);
+				}
+
+				return array(
+					'success' => true,
+					'label'   => $response,
+					'message' => 'Label created successfully.',
+				);
+			},
+			'permission_callback' => 'mcp_workspace_permission_callback',
+			'meta'                => array(
+				'annotations' => array(
+					'readonly'    => false,
+					'destructive' => false,
+					'idempotent'  => false,
+				),
+			),
+		)
+	);
+
+	// =========================================================================
+	// GMAIL - Update Label
+	// =========================================================================
+	wp_register_ability(
+		'gmail/update-label',
+		array(
+			'label'               => 'Update Gmail Label',
+			'description'         => 'Update an existing Gmail label.',
+			'category'            => 'site',
+			'input_schema'        => array(
+				'type'                 => 'object',
+				'required'             => array( 'label_id' ),
+				'properties'           => array(
+					'label_id'              => array(
+						'type'        => 'string',
+						'description' => 'Label ID.',
+					),
+					'name'                  => array(
+						'type'        => 'string',
+						'description' => 'New label name.',
+					),
+					'label_list_visibility' => array(
+						'type'        => 'string',
+						'enum'        => array( 'labelShow', 'labelShowIfUnread', 'labelHide' ),
+						'description' => 'Visibility in label list.',
+					),
+					'message_list_visibility' => array(
+						'type'        => 'string',
+						'enum'        => array( 'show', 'hide' ),
+						'description' => 'Visibility in message list.',
+					),
+					'color'                 => array(
+						'type'        => 'object',
+						'properties'  => array(
+							'textColor'       => array( 'type' => 'string' ),
+							'backgroundColor' => array( 'type' => 'string' ),
+						),
+						'additionalProperties' => false,
+						'description' => 'Optional label colors (hex).',
+					),
+				),
+				'additionalProperties' => false,
+			),
+			'output_schema'       => array(
+				'type'       => 'object',
+				'properties' => array(
+					'success' => array( 'type' => 'boolean' ),
+					'label'   => array( 'type' => 'object' ),
+					'message' => array( 'type' => 'string' ),
+				),
+			),
+			'execute_callback'    => function ( $input = array() ): array {
+				$label_id = sanitize_text_field( $input['label_id'] ?? '' );
+				if ( empty( $label_id ) ) {
+					return array(
+						'success' => false,
+						'message' => 'label_id is required.',
+					);
+				}
+
+				$body = array();
+				if ( isset( $input['name'] ) ) {
+					$body['name'] = sanitize_text_field( $input['name'] );
+				}
+				if ( ! empty( $input['label_list_visibility'] ) ) {
+					$body['labelListVisibility'] = sanitize_text_field( $input['label_list_visibility'] );
+				}
+				if ( ! empty( $input['message_list_visibility'] ) ) {
+					$body['messageListVisibility'] = sanitize_text_field( $input['message_list_visibility'] );
+				}
+				if ( ! empty( $input['color'] ) && is_array( $input['color'] ) ) {
+					$body['color'] = array(
+						'textColor'       => sanitize_text_field( $input['color']['textColor'] ?? '' ),
+						'backgroundColor' => sanitize_text_field( $input['color']['backgroundColor'] ?? '' ),
+					);
+				}
+
+				if ( empty( $body ) ) {
+					return array(
+						'success' => false,
+						'message' => 'No fields provided to update.',
+					);
+				}
+
+				$response = MCP_Gmail_Client::api_request( 'labels/' . $label_id, 'PATCH', $body );
+				if ( is_wp_error( $response ) ) {
+					return array(
+						'success' => false,
+						'message' => $response->get_error_message(),
+					);
+				}
+
+				return array(
+					'success' => true,
+					'label'   => $response,
+					'message' => 'Label updated successfully.',
+				);
+			},
+			'permission_callback' => 'mcp_workspace_permission_callback',
+			'meta'                => array(
+				'annotations' => array(
+					'readonly'    => false,
+					'destructive' => false,
+					'idempotent'  => false,
+				),
+			),
+		)
+	);
+
+	// =========================================================================
+	// GMAIL - Delete Label
+	// =========================================================================
+	wp_register_ability(
+		'gmail/delete-label',
+		array(
+			'label'               => 'Delete Gmail Label',
+			'description'         => 'Delete a Gmail label by ID.',
+			'category'            => 'site',
+			'input_schema'        => array(
+				'type'                 => 'object',
+				'required'             => array( 'label_id' ),
+				'properties'           => array(
+					'label_id' => array(
+						'type'        => 'string',
+						'description' => 'Label ID.',
+					),
+				),
+				'additionalProperties' => false,
+			),
+			'output_schema'       => array(
+				'type'       => 'object',
+				'properties' => array(
+					'success' => array( 'type' => 'boolean' ),
+					'message' => array( 'type' => 'string' ),
+				),
+			),
+			'execute_callback'    => function ( $input = array() ): array {
+				$label_id = sanitize_text_field( $input['label_id'] ?? '' );
+				if ( empty( $label_id ) ) {
+					return array(
+						'success' => false,
+						'message' => 'label_id is required.',
+					);
+				}
+
+				$response = MCP_Gmail_Client::api_request( 'labels/' . $label_id, 'DELETE' );
+				if ( is_wp_error( $response ) ) {
+					return array(
+						'success' => false,
+						'message' => $response->get_error_message(),
+					);
+				}
+
+				return array(
+					'success' => true,
+					'message' => 'Label deleted successfully.',
+				);
+			},
+			'permission_callback' => 'mcp_workspace_permission_callback',
+			'meta'                => array(
+				'annotations' => array(
+					'readonly'    => false,
+					'destructive' => true,
+					'idempotent'  => false,
 				),
 			),
 		)
@@ -672,9 +1099,90 @@ function mcp_register_email_abilities(): void {
 					'message'  => 'Retrieved ' . count( $messages ) . ' message(s).',
 				);
 			},
-			'permission_callback' => function (): bool {
-				return current_user_can( 'manage_options' );
+			'permission_callback' => 'mcp_workspace_permission_callback',
+			'meta'                => array(
+				'annotations' => array(
+					'readonly'    => true,
+					'destructive' => false,
+					'idempotent'  => true,
+				),
+			),
+		)
+	);
+
+	// =========================================================================
+	// GMAIL - List Threads
+	// =========================================================================
+	wp_register_ability(
+		'gmail/list-threads',
+		array(
+			'label'               => 'List Gmail Threads',
+			'description'         => 'Lists Gmail threads with optional filtering.',
+			'category'            => 'site',
+			'input_schema'        => array(
+				'type'                 => 'object',
+				'properties'           => array(
+					'query'      => array(
+						'type'        => 'string',
+						'description' => 'Gmail search query (e.g., "is:unread").',
+					),
+					'max_results' => array(
+						'type'        => 'integer',
+						'default'     => 20,
+						'minimum'     => 1,
+						'maximum'     => 100,
+						'description' => 'Maximum number of threads to return.',
+					),
+					'label_ids'  => array(
+						'type'        => 'array',
+						'items'       => array( 'type' => 'string' ),
+						'description' => 'Filter by label IDs.',
+					),
+				),
+				'additionalProperties' => false,
+			),
+			'output_schema'       => array(
+				'type'       => 'object',
+				'properties' => array(
+					'success' => array( 'type' => 'boolean' ),
+					'threads' => array( 'type' => 'array' ),
+					'count'   => array( 'type' => 'integer' ),
+					'message' => array( 'type' => 'string' ),
+				),
+			),
+			'execute_callback'    => function ( $input = array() ): array {
+				$input = is_array( $input ) ? $input : array();
+
+				$query = array(
+					'maxResults' => min( 100, max( 1, (int) ( $input['max_results'] ?? 20 ) ) ),
+				);
+
+				if ( ! empty( $input['query'] ) ) {
+					$query['q'] = sanitize_text_field( $input['query'] );
+				}
+
+				if ( ! empty( $input['label_ids'] ) && is_array( $input['label_ids'] ) ) {
+					$query['labelIds'] = array_map( 'sanitize_text_field', $input['label_ids'] );
+				}
+
+				$response = MCP_Gmail_Client::api_request( 'threads', 'GET', array(), $query );
+				if ( is_wp_error( $response ) ) {
+					return array(
+						'success' => false,
+						'message' => $response->get_error_message(),
+					);
+				}
+
+				$threads = $response['threads'] ?? array();
+
+				return array(
+					'success' => true,
+					'threads' => $threads,
+					'count'   => count( $threads ),
+					'message' => 'Retrieved ' . count( $threads ) . ' thread(s).',
+				);
 			},
+			'permission_callback' => 'mcp_workspace_permission_callback',
 			'meta'                => array(
 				'annotations' => array(
 					'readonly'    => true,
@@ -770,9 +1278,159 @@ function mcp_register_email_abilities(): void {
 					'message' => 'Email retrieved successfully.',
 				);
 			},
-			'permission_callback' => function (): bool {
-				return current_user_can( 'manage_options' );
+			'permission_callback' => 'mcp_workspace_permission_callback',
+			'meta'                => array(
+				'annotations' => array(
+					'readonly'    => true,
+					'destructive' => false,
+					'idempotent'  => true,
+				),
+			),
+		)
+	);
+
+	// =========================================================================
+	// GMAIL - Get Thread
+	// =========================================================================
+	wp_register_ability(
+		'gmail/get-thread',
+		array(
+			'label'               => 'Get Gmail Thread',
+			'description'         => 'Get a Gmail thread with optional format.',
+			'category'            => 'site',
+			'input_schema'        => array(
+				'type'                 => 'object',
+				'required'             => array( 'thread_id' ),
+				'properties'           => array(
+					'thread_id' => array(
+						'type'        => 'string',
+						'description' => 'Gmail thread ID.',
+					),
+					'format'    => array(
+						'type'        => 'string',
+						'enum'        => array( 'full', 'metadata', 'minimal' ),
+						'default'     => 'full',
+						'description' => 'Response format.',
+					),
+					'metadata_headers' => array(
+						'type'        => 'array',
+						'items'       => array( 'type' => 'string' ),
+						'description' => 'Header names to return with metadata format.',
+					),
+				),
+				'additionalProperties' => false,
+			),
+			'output_schema'       => array(
+				'type'       => 'object',
+				'properties' => array(
+					'success' => array( 'type' => 'boolean' ),
+					'thread'  => array( 'type' => 'object' ),
+					'message' => array( 'type' => 'string' ),
+				),
+			),
+			'execute_callback'    => function ( $input = array() ): array {
+				$thread_id = sanitize_text_field( $input['thread_id'] ?? '' );
+				if ( empty( $thread_id ) ) {
+					return array(
+						'success' => false,
+						'message' => 'thread_id is required.',
+					);
+				}
+
+				$query = array(
+					'format' => sanitize_text_field( $input['format'] ?? 'full' ),
+				);
+				if ( ! empty( $input['metadata_headers'] ) && is_array( $input['metadata_headers'] ) ) {
+					$query['metadataHeaders'] = array_map( 'sanitize_text_field', $input['metadata_headers'] );
+				}
+
+				$response = MCP_Gmail_Client::api_request( 'threads/' . $thread_id, 'GET', array(), $query );
+				if ( is_wp_error( $response ) ) {
+					return array(
+						'success' => false,
+						'message' => $response->get_error_message(),
+					);
+				}
+
+				return array(
+					'success' => true,
+					'thread'  => $response,
+					'message' => 'Thread retrieved successfully.',
+				);
 			},
+			'permission_callback' => 'mcp_workspace_permission_callback',
+			'meta'                => array(
+				'annotations' => array(
+					'readonly'    => true,
+					'destructive' => false,
+					'idempotent'  => true,
+				),
+			),
+		)
+	);
+
+	// =========================================================================
+	// GMAIL - Get Attachment
+	// =========================================================================
+	wp_register_ability(
+		'gmail/get-attachment',
+		array(
+			'label'               => 'Get Gmail Attachment',
+			'description'         => 'Get a Gmail attachment by message and attachment ID.',
+			'category'            => 'site',
+			'input_schema'        => array(
+				'type'                 => 'object',
+				'required'             => array( 'message_id', 'attachment_id' ),
+				'properties'           => array(
+					'message_id'    => array(
+						'type'        => 'string',
+						'description' => 'Gmail message ID.',
+					),
+					'attachment_id' => array(
+						'type'        => 'string',
+						'description' => 'Attachment ID from message payload.',
+					),
+				),
+				'additionalProperties' => false,
+			),
+			'output_schema'       => array(
+				'type'       => 'object',
+				'properties' => array(
+					'success'       => array( 'type' => 'boolean' ),
+					'attachment_id' => array( 'type' => 'string' ),
+					'size'          => array( 'type' => 'integer' ),
+					'data_base64'   => array( 'type' => 'string' ),
+					'message'       => array( 'type' => 'string' ),
+				),
+			),
+			'execute_callback'    => function ( $input = array() ): array {
+				$message_id = sanitize_text_field( $input['message_id'] ?? '' );
+				$attachment_id = sanitize_text_field( $input['attachment_id'] ?? '' );
+
+				if ( empty( $message_id ) || empty( $attachment_id ) ) {
+					return array(
+						'success' => false,
+						'message' => 'message_id and attachment_id are required.',
+					);
+				}
+
+				$response = MCP_Gmail_Client::api_request( 'messages/' . $message_id . '/attachments/' . $attachment_id );
+				if ( is_wp_error( $response ) ) {
+					return array(
+						'success' => false,
+						'message' => $response->get_error_message(),
+					);
+				}
+
+				return array(
+					'success'       => true,
+					'attachment_id' => $attachment_id,
+					'size'          => (int) ( $response['size'] ?? 0 ),
+					'data_base64'   => $response['data'] ?? '',
+					'message'       => 'Attachment retrieved successfully.',
+				);
+			},
+			'permission_callback' => 'mcp_workspace_permission_callback',
 			'meta'                => array(
 				'annotations' => array(
 					'readonly'    => true,
@@ -885,9 +1543,7 @@ function mcp_register_email_abilities(): void {
 					'message'    => "Email sent successfully to $to",
 				);
 			},
-			'permission_callback' => function (): bool {
-				return current_user_can( 'manage_options' );
-			},
+			'permission_callback' => 'mcp_workspace_permission_callback',
 			'meta'                => array(
 				'annotations' => array(
 					'readonly'    => false,
@@ -1031,9 +1687,7 @@ function mcp_register_email_abilities(): void {
 					'message' => 'Message labels updated.',
 				);
 			},
-			'permission_callback' => function (): bool {
-				return current_user_can( 'manage_options' );
-			},
+			'permission_callback' => 'mcp_workspace_permission_callback',
 			'meta'                => array(
 				'annotations' => array(
 					'readonly'    => false,
@@ -1178,9 +1832,7 @@ function mcp_register_email_abilities(): void {
 					'message'    => "Reply sent successfully to $to",
 				);
 			},
-			'permission_callback' => function (): bool {
-				return current_user_can( 'manage_options' );
-			},
+			'permission_callback' => 'mcp_workspace_permission_callback',
 			'meta'                => array(
 				'annotations' => array(
 					'readonly'    => false,
@@ -1259,9 +1911,7 @@ function mcp_register_email_abilities(): void {
 					'message' => $sent ? "Email sent to $to" : 'Failed to send email.',
 				);
 			},
-			'permission_callback' => function (): bool {
-				return current_user_can( 'manage_options' );
-			},
+			'permission_callback' => 'mcp_workspace_permission_callback',
 			'meta'                => array(
 				'annotations' => array(
 					'readonly'    => false,

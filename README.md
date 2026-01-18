@@ -6,7 +6,7 @@ Gmail API integration for Google Workspace via MCP.
 [![License: GPL v2](https://img.shields.io/badge/License-GPL%20v2-blue.svg)](https://www.gnu.org/licenses/gpl-2.0)
 
 **Tested up to:** 6.9
-**Stable tag:** 2.0.2
+**Stable tag:** 2.0.3
 **License:** GPLv2 or later
 **License URI:** https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -51,19 +51,28 @@ In Google Workspace Admin:
    - `https://www.googleapis.com/auth/gmail.readonly`
    - `https://www.googleapis.com/auth/gmail.send`
    - `https://www.googleapis.com/auth/gmail.modify`
+   - `https://www.googleapis.com/auth/gmail.labels`
 
 ### 3. Configure Plugin
 
 Use `gmail/configure` ability to set up credentials.
 
-## Abilities (8)
+## Abilities (14)
 
 | Ability | Description |
 |---------|-------------|
 | `gmail/configure` | Set up Gmail API service account credentials |
 | `gmail/status` | Check API connection status and configuration |
+| `gmail/list-labels` | List Gmail labels |
+| `gmail/get-label` | Get a Gmail label by ID |
+| `gmail/create-label` | Create a Gmail label |
+| `gmail/update-label` | Update a Gmail label |
+| `gmail/delete-label` | Delete a Gmail label |
 | `gmail/list` | List inbox messages with filtering |
+| `gmail/list-threads` | List Gmail threads |
 | `gmail/get` | Get full email content by ID |
+| `gmail/get-thread` | Get a Gmail thread |
+| `gmail/get-attachment` | Fetch a message attachment (base64) |
 | `gmail/send` | Send email with HTML, attachments, CC, BCC |
 | `gmail/modify` | Modify labels (archive, mark read/unread, etc.) |
 | `gmail/reply` | Reply to an existing email thread |
