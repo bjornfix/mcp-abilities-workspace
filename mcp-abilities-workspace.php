@@ -1,9 +1,9 @@
 <?php
 /**
- * Plugin Name: MCP Abilities - Email
- * Plugin URI: https://github.com/bjornfix/mcp-abilities-email
- * Description: Email abilities for MCP. Gmail API integration with service account, inbox management, send/receive emails.
- * Version: 2.0.0
+ * Plugin Name: MCP Abilities - Google Workspace
+ * Plugin URI: https://github.com/bjornfix/mcp-abilities-workspace
+ * Description: Google Workspace Gmail API abilities for MCP. Service account only, inbox management, send/receive emails.
+ * Version: 2.0.1
  * Author: Devenia
  * Author URI: https://devenia.com
  * License: GPL-2.0+
@@ -12,7 +12,7 @@
  * Requires PHP: 8.0
  * Requires Plugins: abilities-api
  *
- * @package MCP_Abilities_Email
+ * @package MCP_Abilities_Workspace
  */
 
 declare( strict_types=1 );
@@ -367,7 +367,7 @@ class MCP_Gmail_Client {
 function mcp_email_check_dependencies(): bool {
 	if ( ! function_exists( 'wp_register_ability' ) ) {
 		add_action( 'admin_notices', function () {
-			echo '<div class="notice notice-error"><p><strong>MCP Abilities - Email</strong> requires the <a href="https://github.com/WordPress/abilities-api">Abilities API</a> plugin to be installed and activated.</p></div>';
+			echo '<div class="notice notice-error"><p><strong>MCP Abilities - Google Workspace</strong> requires the <a href="https://github.com/WordPress/abilities-api">Abilities API</a> plugin to be installed and activated.</p></div>';
 		} );
 		return false;
 	}
@@ -375,7 +375,7 @@ function mcp_email_check_dependencies(): bool {
 }
 
 /**
- * Register Email abilities.
+ * Register Google Workspace abilities.
  */
 function mcp_register_email_abilities(): void {
 	if ( ! mcp_email_check_dependencies() ) {

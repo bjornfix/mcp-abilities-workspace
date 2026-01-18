@@ -1,18 +1,18 @@
-# MCP Abilities - Email
+# MCP Abilities - Google Workspace
 
-Gmail API integration for WordPress via MCP.
+Gmail API integration for Google Workspace via MCP.
 
-[![GitHub release](https://img.shields.io/github/v/release/bjornfix/mcp-abilities-email)](https://github.com/bjornfix/mcp-abilities-email/releases)
+[![GitHub release](https://img.shields.io/github/v/release/bjornfix/mcp-abilities-workspace)](https://github.com/bjornfix/mcp-abilities-workspace/releases)
 [![License: GPL v2](https://img.shields.io/badge/License-GPL%20v2-blue.svg)](https://www.gnu.org/licenses/gpl-2.0)
 
-**Tested up to:** 6.7
-**Stable tag:** 1.0.0
+**Tested up to:** 6.9
+**Stable tag:** 2.0.1
 **License:** GPLv2 or later
 **License URI:** https://www.gnu.org/licenses/gpl-2.0.html
 
 ## What It Does
 
-This add-on plugin provides full Gmail API integration through MCP (Model Context Protocol). Your AI assistant can send emails, read inbox messages, reply to threads, and manage labels - all through conversation.
+This add-on plugin provides Gmail API integration through MCP (Model Context Protocol) for Google Workspace accounts. Your AI assistant can send emails, read inbox messages, reply to threads, and manage labels. Personal Gmail accounts are not supported.
 
 **Part of the [MCP Expose Abilities](https://devenia.com/plugins/mcp-expose-abilities/) ecosystem.**
 
@@ -22,15 +22,15 @@ This add-on plugin provides full Gmail API integration through MCP (Model Contex
 - PHP 8.0+
 - [Abilities API](https://github.com/WordPress/abilities-api) plugin
 - [MCP Adapter](https://github.com/WordPress/mcp-adapter) plugin
-- Google Workspace with service account (domain-wide delegation)
+- Google Workspace with service account (domain-wide delegation). Personal Gmail accounts are not supported.
 
 ## Installation
 
 1. Install the required plugins (Abilities API, MCP Adapter)
-2. Download the latest release from [Releases](https://github.com/bjornfix/mcp-abilities-email/releases)
+2. Download the latest release from [Releases](https://github.com/bjornfix/mcp-abilities-workspace/releases)
 3. Upload via WordPress Admin → Plugins → Add New → Upload Plugin
 4. Activate the plugin
-5. Configure Gmail API credentials (see Setup below)
+5. Configure Google Workspace Gmail API credentials (see Setup below)
 
 ## Setup
 
@@ -67,11 +67,11 @@ Use `gmail/configure` ability to set up credentials.
 | `gmail/send` | Send email with HTML, attachments, CC, BCC |
 | `gmail/modify` | Modify labels (archive, mark read/unread, etc.) |
 | `gmail/reply` | Reply to an existing email thread |
-| `email/send` | Send email via WordPress wp_mail (fallback) |
+| `email/send` | Send email via WordPress wp_mail (non-Gmail fallback) |
 
 ## Usage Examples
 
-### Configure Gmail API
+### Configure Gmail API (Google Workspace)
 
 ```json
 {
@@ -137,7 +137,7 @@ Use `gmail/configure` ability to set up credentials.
 
 - Uses Google service accounts (no user passwords stored)
 - Domain-wide delegation controlled by Workspace admin
-- Scopes limited to email operations only
+- Scopes limited to Gmail API operations only
 - All operations require WordPress authentication
 
 ## License
