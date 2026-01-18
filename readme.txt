@@ -1,9 +1,9 @@
 === MCP Abilities - Google Workspace ===
 Contributors: devenia
-Tags: mcp, gmail, google-workspace, workspace, ai, automation
+Tags: mcp, google-workspace, gmail, ai, automation
 Requires at least: 6.9
 Tested up to: 6.9
-Stable tag: 2.0.1
+Stable tag: 2.0.2
 Requires PHP: 8.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
@@ -26,6 +26,9 @@ Part of the MCP Expose Abilities ecosystem.
 5. Configure Google Workspace Gmail API credentials
 
 == Changelog ==
+
+= 2.0.2 =
+* Reduce readme tags to 5 for plugin check compliance
 
 = 2.0.1 =
 * Rename plugin to Google Workspace (repo + folder + docs)
