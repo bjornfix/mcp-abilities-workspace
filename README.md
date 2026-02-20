@@ -28,7 +28,7 @@ This add-on plugin provides Gmail API integration through MCP (Model Context Pro
 
 1. Install the required plugins (Abilities API, MCP Adapter)
 2. Download the latest release from [Releases](https://github.com/bjornfix/mcp-abilities-workspace/releases)
-3. Upload via WordPress Admin → Plugins → Add New → Upload Plugin
+3. Upload via WordPress Admin > Plugins > Add New > Upload Plugin
 4. Activate the plugin
 5. Configure Google Workspace Gmail API credentials (see Setup below)
 
@@ -45,7 +45,7 @@ This add-on plugin provides Gmail API integration through MCP (Model Context Pro
 ### 2. Configure Domain-Wide Delegation
 
 In Google Workspace Admin:
-1. Go to Security → API controls → Domain-wide delegation
+1. Go to Security > API controls > Domain-wide delegation
 2. Add the service account client ID
 3. Add scopes:
    - `https://www.googleapis.com/auth/gmail.readonly`
@@ -148,6 +148,30 @@ Use `gmail/configure` ability to set up credentials. The `service_account_json` 
 - Domain-wide delegation controlled by Workspace admin
 - Scopes limited to Gmail API operations only
 - All operations require WordPress authentication
+
+## Changelog
+
+### 2.0.5
+- Security: gmail/configure now accepts raw JSON only (no file path reads)
+- Docs: sync stable tag and parameter examples with current behavior
+
+### 2.0.4
+- Fixed: Removed hard plugin header dependency on abilities-api to avoid slug-mismatch activation blocking
+
+### 2.0.3
+- Cache config access and tighten API response handling
+
+### 2.0.2
+- Reduce readme tags to 5 for plugin check compliance
+
+### 2.0.1
+- Rename plugin to Google Workspace (repo + folder + docs)
+
+### 2.0.0
+- Clarify Google Workspace-only support (service accounts, domain-wide delegation)
+
+### 1.0.0
+- Initial release
 
 ## License
 
