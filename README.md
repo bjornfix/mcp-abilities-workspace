@@ -142,6 +142,59 @@ Use `gmail/configure` ability to set up credentials. The `service_account_json` 
 }
 ```
 
+## Concrete Workflow Example
+
+### Triage support inbox and send a reply draft
+
+1. List unread support emails:
+
+```json
+{
+  "ability_name": "gmail/list",
+  "parameters": {
+    "label": "INBOX",
+    "q": "is:unread subject:(invoice OR billing OR refund)",
+    "max_results": 5
+  }
+}
+```
+
+2. Get the full message content for the top hit:
+
+```json
+{
+  "ability_name": "gmail/get",
+  "parameters": {
+    "id": "MESSAGE_ID_FROM_LIST"
+  }
+}
+```
+
+3. Reply in the same thread:
+
+```json
+{
+  "ability_name": "gmail/reply",
+  "parameters": {
+    "thread_id": "THREAD_ID_FROM_GET",
+    "body": "Hi! Thanks for contacting us. I have checked your invoice and processed the correction. You will receive the updated receipt shortly."
+  }
+}
+```
+
+4. Label and archive the handled message:
+
+```json
+{
+  "ability_name": "gmail/modify",
+  "parameters": {
+    "id": "MESSAGE_ID_FROM_LIST",
+    "add_labels": ["Label_1234567890"],
+    "remove_labels": ["INBOX", "UNREAD"]
+  }
+}
+```
+
 ## Security
 
 - Uses Google service accounts (no user passwords stored)
