@@ -3,7 +3,7 @@
  * Plugin Name: MCP Abilities - Google Workspace
  * Plugin URI: https://github.com/bjornfix/mcp-abilities-workspace
  * Description: Google Workspace Gmail API abilities for MCP. Service account only, inbox management, send/receive emails.
- * Version: 2.0.4
+ * Version: 2.0.5
  * Author: Devenia
  * Author URI: https://devenia.com
  * License: GPL-2.0+
@@ -431,10 +431,10 @@ function mcp_register_email_abilities(): void {
 				'type'                 => 'object',
 				'required'             => array( 'service_account_json', 'impersonate_email' ),
 				'properties'           => array(
-					'service_account_json' => array(
-						'type'        => 'string',
-						'description' => 'Google service account JSON (as string) or path to JSON file.',
-					),
+						'service_account_json' => array(
+							'type'        => 'string',
+							'description' => 'Google service account JSON payload as a raw JSON string.',
+						),
 					'impersonate_email'    => array(
 						'type'        => 'string',
 						'description' => 'Email address to impersonate (must be in the Workspace domain).',
@@ -462,17 +462,15 @@ function mcp_register_email_abilities(): void {
 					);
 				}
 
-				// Try to parse JSON - could be raw JSON or file path.
-				if ( str_starts_with( trim( $json_input ), '{' ) ) {
-					$service_account = json_decode( $json_input, true );
-				} elseif ( file_exists( $json_input ) && is_readable( $json_input ) ) {
-					$service_account = json_decode( file_get_contents( $json_input ), true );
-				} else {
-					return array(
-						'success' => false,
-						'message' => 'Invalid service account JSON. Provide raw JSON or valid file path.',
-					);
-				}
+					// Only accept raw JSON payloads to avoid arbitrary local file reads.
+					if ( str_starts_with( trim( $json_input ), '{' ) ) {
+						$service_account = json_decode( $json_input, true );
+					} else {
+						return array(
+							'success' => false,
+							'message' => 'Invalid service_account_json. Provide raw JSON content.',
+						);
+					}
 
 				if ( ! $service_account || empty( $service_account['client_email'] ) || empty( $service_account['private_key'] ) ) {
 					return array(
@@ -1022,23 +1020,33 @@ function mcp_register_email_abilities(): void {
 						'maximum'     => 100,
 						'description' => 'Maximum number of messages to return.',
 					),
-					'label_ids'  => array(
-						'type'        => 'array',
-						'items'       => array( 'type' => 'string' ),
-						'description' => 'Filter by label IDs (e.g., ["INBOX", "UNREAD"]).',
+						'label_ids'  => array(
+							'type'        => 'array',
+							'items'       => array( 'type' => 'string' ),
+							'description' => 'Filter by label IDs (e.g., ["INBOX", "UNREAD"]).',
+						),
+						'page_token' => array(
+							'type'        => 'string',
+							'description' => 'Pagination token from previous response.',
+						),
+						'include_details' => array(
+							'type'        => 'boolean',
+							'default'     => false,
+							'description' => 'If true, fetch message metadata (slower due additional API calls).',
+						),
 					),
+					'additionalProperties' => false,
 				),
-				'additionalProperties' => false,
-			),
 			'output_schema'       => array(
 				'type'       => 'object',
 				'properties' => array(
 					'success'  => array( 'type' => 'boolean' ),
-					'messages' => array( 'type' => 'array' ),
-					'count'    => array( 'type' => 'integer' ),
-					'message'  => array( 'type' => 'string' ),
+						'messages' => array( 'type' => 'array' ),
+						'count'    => array( 'type' => 'integer' ),
+						'next_page_token' => array( 'type' => 'string' ),
+						'message'  => array( 'type' => 'string' ),
+					),
 				),
-			),
 			'execute_callback'    => function ( $input = array() ): array {
 				$input = is_array( $input ) ? $input : array();
 
@@ -1050,11 +1058,15 @@ function mcp_register_email_abilities(): void {
 					$query['q'] = sanitize_text_field( $input['query'] );
 				}
 
-				if ( ! empty( $input['label_ids'] ) && is_array( $input['label_ids'] ) ) {
-					$query['labelIds'] = array_map( 'sanitize_text_field', $input['label_ids'] );
-				}
+					if ( ! empty( $input['label_ids'] ) && is_array( $input['label_ids'] ) ) {
+						$query['labelIds'] = array_map( 'sanitize_text_field', $input['label_ids'] );
+					}
+					if ( ! empty( $input['page_token'] ) ) {
+						$query['pageToken'] = sanitize_text_field( (string) $input['page_token'] );
+					}
+					$include_details = ! empty( $input['include_details'] );
 
-				$response = MCP_Gmail_Client::api_request( 'messages', 'GET', array(), $query );
+					$response = MCP_Gmail_Client::api_request( 'messages', 'GET', array(), $query );
 
 				if ( is_wp_error( $response ) ) {
 					return array(
@@ -1063,11 +1075,19 @@ function mcp_register_email_abilities(): void {
 					);
 				}
 
-				$messages = array();
-				if ( ! empty( $response['messages'] ) ) {
-					foreach ( $response['messages'] as $msg ) {
-						// Get message metadata.
-						$detail = MCP_Gmail_Client::api_request(
+					$messages = array();
+					if ( ! empty( $response['messages'] ) ) {
+						foreach ( $response['messages'] as $msg ) {
+							if ( ! $include_details ) {
+								$messages[] = array(
+									'id'        => $msg['id'],
+									'thread_id' => $msg['threadId'] ?? '',
+								);
+								continue;
+							}
+
+							// Get message metadata.
+							$detail = MCP_Gmail_Client::api_request(
 							'messages/' . $msg['id'],
 							'GET',
 							array(),
@@ -1091,13 +1111,14 @@ function mcp_register_email_abilities(): void {
 					}
 				}
 
-				return array(
-					'success'  => true,
-					'messages' => $messages,
-					'count'    => count( $messages ),
-					'message'  => 'Retrieved ' . count( $messages ) . ' message(s).',
-				);
-			},
+					return array(
+						'success'  => true,
+						'messages' => $messages,
+						'count'    => count( $messages ),
+						'next_page_token' => $response['nextPageToken'] ?? '',
+						'message'  => 'Retrieved ' . count( $messages ) . ' message(s).',
+					);
+				},
 			'permission_callback' => 'mcp_workspace_permission_callback',
 			'meta'                => array(
 				'annotations' => array(
@@ -1132,23 +1153,28 @@ function mcp_register_email_abilities(): void {
 						'maximum'     => 100,
 						'description' => 'Maximum number of threads to return.',
 					),
-					'label_ids'  => array(
-						'type'        => 'array',
-						'items'       => array( 'type' => 'string' ),
-						'description' => 'Filter by label IDs.',
+						'label_ids'  => array(
+							'type'        => 'array',
+							'items'       => array( 'type' => 'string' ),
+							'description' => 'Filter by label IDs.',
+						),
+						'page_token' => array(
+							'type'        => 'string',
+							'description' => 'Pagination token from previous response.',
+						),
 					),
+					'additionalProperties' => false,
 				),
-				'additionalProperties' => false,
-			),
 			'output_schema'       => array(
 				'type'       => 'object',
 				'properties' => array(
 					'success' => array( 'type' => 'boolean' ),
-					'threads' => array( 'type' => 'array' ),
-					'count'   => array( 'type' => 'integer' ),
-					'message' => array( 'type' => 'string' ),
+						'threads' => array( 'type' => 'array' ),
+						'count'   => array( 'type' => 'integer' ),
+						'next_page_token' => array( 'type' => 'string' ),
+						'message' => array( 'type' => 'string' ),
+					),
 				),
-			),
 			'execute_callback'    => function ( $input = array() ): array {
 				$input = is_array( $input ) ? $input : array();
 
@@ -1160,9 +1186,12 @@ function mcp_register_email_abilities(): void {
 					$query['q'] = sanitize_text_field( $input['query'] );
 				}
 
-				if ( ! empty( $input['label_ids'] ) && is_array( $input['label_ids'] ) ) {
-					$query['labelIds'] = array_map( 'sanitize_text_field', $input['label_ids'] );
-				}
+					if ( ! empty( $input['label_ids'] ) && is_array( $input['label_ids'] ) ) {
+						$query['labelIds'] = array_map( 'sanitize_text_field', $input['label_ids'] );
+					}
+					if ( ! empty( $input['page_token'] ) ) {
+						$query['pageToken'] = sanitize_text_field( (string) $input['page_token'] );
+					}
 
 				$response = MCP_Gmail_Client::api_request( 'threads', 'GET', array(), $query );
 				if ( is_wp_error( $response ) ) {
@@ -1174,13 +1203,14 @@ function mcp_register_email_abilities(): void {
 
 				$threads = $response['threads'] ?? array();
 
-				return array(
-					'success' => true,
-					'threads' => $threads,
-					'count'   => count( $threads ),
-					'message' => 'Retrieved ' . count( $threads ) . ' thread(s).',
-				);
-			},
+					return array(
+						'success' => true,
+						'threads' => $threads,
+						'count'   => count( $threads ),
+						'next_page_token' => $response['nextPageToken'] ?? '',
+						'message' => 'Retrieved ' . count( $threads ) . ' thread(s).',
+					);
+				},
 			'permission_callback' => 'mcp_workspace_permission_callback',
 			'meta'                => array(
 				'annotations' => array(
@@ -1380,18 +1410,25 @@ function mcp_register_email_abilities(): void {
 			'input_schema'        => array(
 				'type'                 => 'object',
 				'required'             => array( 'message_id', 'attachment_id' ),
-				'properties'           => array(
-					'message_id'    => array(
-						'type'        => 'string',
-						'description' => 'Gmail message ID.',
+					'properties'           => array(
+						'message_id'    => array(
+							'type'        => 'string',
+							'description' => 'Gmail message ID.',
+						),
+						'attachment_id' => array(
+							'type'        => 'string',
+							'description' => 'Attachment ID from message payload.',
+						),
+						'max_bytes' => array(
+							'type'        => 'integer',
+							'default'     => 5242880,
+							'minimum'     => 1,
+							'maximum'     => 20971520,
+							'description' => 'Maximum attachment size allowed in response (default 5MB, max 20MB).',
+						),
 					),
-					'attachment_id' => array(
-						'type'        => 'string',
-						'description' => 'Attachment ID from message payload.',
-					),
+					'additionalProperties' => false,
 				),
-				'additionalProperties' => false,
-			),
 			'output_schema'       => array(
 				'type'       => 'object',
 				'properties' => array(
@@ -1413,21 +1450,30 @@ function mcp_register_email_abilities(): void {
 					);
 				}
 
-				$response = MCP_Gmail_Client::api_request( 'messages/' . $message_id . '/attachments/' . $attachment_id );
-				if ( is_wp_error( $response ) ) {
-					return array(
-						'success' => false,
-						'message' => $response->get_error_message(),
-					);
-				}
+					$response = MCP_Gmail_Client::api_request( 'messages/' . $message_id . '/attachments/' . $attachment_id );
+					if ( is_wp_error( $response ) ) {
+						return array(
+							'success' => false,
+							'message' => $response->get_error_message(),
+						);
+					}
+					$max_bytes = isset( $input['max_bytes'] ) ? (int) $input['max_bytes'] : 5242880;
+					$max_bytes = max( 1, min( 20971520, $max_bytes ) );
+					$size      = (int) ( $response['size'] ?? 0 );
+					if ( $size > $max_bytes ) {
+						return array(
+							'success' => false,
+							'message' => 'Attachment exceeds max_bytes limit for response payload.',
+						);
+					}
 
-				return array(
-					'success'       => true,
-					'attachment_id' => $attachment_id,
-					'size'          => (int) ( $response['size'] ?? 0 ),
-					'data_base64'   => $response['data'] ?? '',
-					'message'       => 'Attachment retrieved successfully.',
-				);
+					return array(
+						'success'       => true,
+						'attachment_id' => $attachment_id,
+						'size'          => $size,
+						'data_base64'   => $response['data'] ?? '',
+						'message'       => 'Attachment retrieved successfully.',
+					);
 			},
 			'permission_callback' => 'mcp_workspace_permission_callback',
 			'meta'                => array(

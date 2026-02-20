@@ -6,7 +6,7 @@ Gmail API integration for Google Workspace via MCP.
 [![License: GPL v2](https://img.shields.io/badge/License-GPL%20v2-blue.svg)](https://www.gnu.org/licenses/gpl-2.0)
 
 **Tested up to:** 6.9
-**Stable tag:** 2.0.3
+**Stable tag:** 2.0.5
 **License:** GPLv2 or later
 **License URI:** https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -55,9 +55,9 @@ In Google Workspace Admin:
 
 ### 3. Configure Plugin
 
-Use `gmail/configure` ability to set up credentials.
+Use `gmail/configure` ability to set up credentials. The `service_account_json` parameter must be raw JSON content (not a file path).
 
-## Abilities (14)
+## Abilities (16)
 
 | Ability | Description |
 |---------|-------------|
@@ -86,7 +86,7 @@ Use `gmail/configure` ability to set up credentials.
 {
   "ability_name": "gmail/configure",
   "parameters": {
-    "service_account": { "...service account JSON..." },
+    "service_account_json": "{...raw service account JSON...}",
     "impersonate_email": "user@yourdomain.com"
   }
 }
