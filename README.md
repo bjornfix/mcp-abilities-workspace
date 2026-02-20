@@ -14,6 +14,8 @@ Gmail API integration for Google Workspace via MCP.
 
 This add-on plugin provides Gmail API integration through MCP (Model Context Protocol) for Google Workspace accounts. Your AI assistant can send emails, read inbox messages, reply to threads, and manage labels. Personal Gmail accounts are not supported.
 
+Concrete example: your support inbox receives refund and invoice emails all day. With this plugin, an AI assistant can read unread billing messages, draft or send a reply in the same thread, label the message as handled, and archive it without you opening Gmail.
+
 **Part of the [MCP Expose Abilities](https://devenia.com/plugins/mcp-expose-abilities/) ecosystem.**
 
 ## Requirements
