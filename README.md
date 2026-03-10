@@ -6,7 +6,7 @@ Gmail API integration for Google Workspace via MCP.
 [![License: GPL v2](https://img.shields.io/badge/License-GPL%20v2-blue.svg)](https://www.gnu.org/licenses/gpl-2.0)
 
 **Tested up to:** 6.9
-**Stable tag:** 2.0.5
+**Stable tag:** 2.0.6
 **License:** GPLv2 or later
 **License URI:** https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -205,6 +205,9 @@ Use `gmail/configure` ability to set up credentials. The `service_account_json` 
 - All operations require WordPress authentication
 
 ## Changelog
+
+### 2.0.6
+- Docs: expanded the WordPress-standard `readme.txt` so the published ZIP now includes fuller requirements, setup guidance, use cases, and Devenia ecosystem links
 
 ### 2.0.5
 - Security: gmail/configure now accepts raw JSON only (no file path reads)
