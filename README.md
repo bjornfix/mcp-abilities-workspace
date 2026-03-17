@@ -16,7 +16,24 @@ This add-on plugin provides Gmail API integration through MCP (Model Context Pro
 
 Concrete example: your support inbox receives refund and invoice emails all day. With this plugin, an AI assistant can read unread billing messages, draft or send a reply in the same thread, label the message as handled, and archive it without you opening Gmail.
 
-**Part of the [MCP Expose Abilities](https://devenia.com/plugins/mcp-expose-abilities/) ecosystem.**
+**Part of the [MCP Expose Abilities](https://github.com/bjornfix/mcp-expose-abilities) ecosystem.**
+
+This is one piece of a bigger open WordPress automation stack that lets AI agents handle real communication workflows instead of leaving teams stuck doing inbox work by hand.
+
+## Why This Is Cool
+
+Support and operations inboxes are full of small repetitive tasks that eat time and attention.
+
+This add-on lets Codex or Claude inspect threads, reply in context, label mail, archive handled items, and turn email work into part of the same WordPress-centered workflow. That is absurdly useful once you start using it.
+
+## Documentation
+
+- [Core Plugin: MCP Expose Abilities](https://github.com/bjornfix/mcp-expose-abilities)
+- [MCP Wiki Home](https://github.com/bjornfix/mcp-expose-abilities/wiki)
+- [Why Teams Use It](https://github.com/bjornfix/mcp-expose-abilities/wiki/Why-Teams-Use-It)
+- [Use Cases](https://github.com/bjornfix/mcp-expose-abilities/wiki/Use-Cases)
+- [Google Workspace Add-On Guide](https://github.com/bjornfix/mcp-expose-abilities/wiki/Addon-Google-Workspace)
+- [Getting Started](https://github.com/bjornfix/mcp-expose-abilities/wiki/Getting-Started)
 
 ## Requirements
 
@@ -239,8 +256,19 @@ GPL-2.0+
 
 [Devenia](https://devenia.com) - We've been doing SEO and web development since 1993.
 
+## Free and Open
+
+Like the rest of the ecosystem, this add-on is free for all and completely open source.
+
+## Star and Share
+
+If this add-on helps, please star the repo, share the ecosystem, and point people to the main wiki:
+
+- https://github.com/bjornfix/mcp-expose-abilities
+- https://github.com/bjornfix/mcp-expose-abilities/wiki
+
 ## Links
 
-- [Plugin Page](https://devenia.com/plugins/mcp-expose-abilities/)
 - [Core Plugin (MCP Expose Abilities)](https://github.com/bjornfix/mcp-expose-abilities)
-- [All Add-on Plugins](https://devenia.com/plugins/mcp-expose-abilities/#add-ons)
+- [Main Wiki](https://github.com/bjornfix/mcp-expose-abilities/wiki)
+- [Google Workspace Add-On Guide](https://github.com/bjornfix/mcp-expose-abilities/wiki/Addon-Google-Workspace)
