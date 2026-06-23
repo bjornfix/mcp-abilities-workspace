@@ -8,7 +8,7 @@ Google Workspace Gmail API abilities for MCP. Service account only, inbox manage
 [![PHP](https://img.shields.io/badge/PHP-8.0%2B-purple.svg)](https://php.net)
 
 **Tested up to:** 7.0
-**Stable tag:** 2.0.6
+**Stable tag:** 2.0.7
 **License:** GPLv2 or later
 **License URI:** https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -16,7 +16,7 @@ Google Workspace Gmail API abilities for MCP. Service account only, inbox manage
 
 Google Workspace Gmail API abilities for MCP. Service account only, inbox management, send/receive emails.
 
-This plugin is part of the Devenia MCP abilities ecosystem. It gives an MCP-capable agent a focused, authenticated way to work with Google Workspace work inside WordPress through MCP.
+This plugin is part of the MCP abilities ecosystem. It gives an MCP-capable agent a focused, authenticated way to work with Google Workspace work inside WordPress through MCP.
 
 **Example:** "Handle this WordPress maintenance task directly." - The agent can inspect the site, call the relevant ability, and return the result without making the human click through wp-admin for every step.
 
@@ -194,6 +194,10 @@ If you skip base-stack verification and start with add-ons immediately, troubles
 
 ## Changelog
 
+### 2.0.7
+- Update tested WordPress version metadata for Plugin Check.
+- Align public release identity with the Basicus author/contributor rule.
+
 ### 2.0.6
 - Docs: expanded the WordPress-standard `readme.txt` so the published ZIP now includes fuller requirements, setup guidance, use cases, and Devenia ecosystem links
 
@@ -229,7 +233,7 @@ GPL-2.0+
 
 ## Author
 
-[Devenia](https://devenia.com) - We've been doing SEO and web development since 1993.
+[basicus](https://profiles.wordpress.org/basicus/)
 
 ## Links
 
