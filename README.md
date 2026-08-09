@@ -107,7 +107,31 @@ If you are new to the stack, use this order:
 
 If you skip base-stack verification and start with add-ons immediately, troubleshooting gets harder than it needs to be.
 
-## Abilities (16)
+## Reader Workflows
+
+- Configuration and status (2): configure a Google service account with domain-wide delegation for one impersonated Workspace mailbox, then check whether the connection is configured and connected.
+- Label administration (5): list and inspect system or user labels, then create, update, or delete one exact label.
+- Message and thread reading (5): search and page through messages or threads, inspect one exact message or thread, and retrieve one exact attachment with a configurable response limit from 1 byte to 20 MB.
+- Outbound messages (3): send a new message through the configured Gmail identity, reply to one exact existing message and thread, or send through the site's WordPress mail transport.
+- Mailbox state changes (1): add or remove exact labels on one message, including shortcuts for read, unread, archive, or trash state.
+
+## Authorization and Change Boundaries
+
+- Every operation requires an authenticated WordPress user with `manage_options`.
+- Gmail operations use only the configured Google service account and one impersonated Workspace mailbox. The requested scopes are read, send, modify, and label access.
+- Configuration accepts raw service account JSON only. It rejects file paths, requires a client email and valid private key, saves the configuration, and tests authentication.
+- Read operations require exact message, thread, attachment, or label identifiers where applicable. Reading one message can mark it read only when that option is explicitly requested.
+- Sending requires an exact recipient, subject, and body. Gmail sending can include CC and BCC recipients. Replying requires an exact source message and body, with reply all disabled unless explicitly requested. A successful call sends immediately and does not provide a separate confirmation stage.
+- Mailbox changes require one exact message. Label additions and removals are explicit. Read, unread, archive, and trash shortcuts change Gmail state immediately and do not provide a separate confirmation stage.
+- Label deletion requires one exact label identifier and deletes it immediately. Label creation and updates use the supplied name, visibility, and optional color fields.
+
+## Dependencies
+
+The exact runtime and integration dependencies are listed in [DEPENDENCIES.md](DEPENDENCIES.md).
+
+[Download MCP Abilities - Google Workspace](https://downloads.devenia.com/mcp-abilities-workspace.zip)
+
+## Registered Abilities (16)
 
 | Ability | Description |
 |---------|-------------|
@@ -123,10 +147,10 @@ If you skip base-stack verification and start with add-ons immediately, troubles
 | `gmail/get` | Get full email content by ID |
 | `gmail/get-thread` | Get a Gmail thread |
 | `gmail/get-attachment` | Fetch a message attachment (base64) |
-| `gmail/send` | Send email with HTML, attachments, CC, BCC |
+| `gmail/send` | Send email with HTML, CC, and BCC |
 | `gmail/modify` | Modify labels (archive, mark read/unread, etc.) |
 | `gmail/reply` | Reply to an existing email thread |
-| `email/send` | Send email via WordPress wp_mail (non-Gmail fallback) |
+| `email/send` | Send email through the site's WordPress mail transport |
 
 ## Usage Examples
 
@@ -174,7 +198,7 @@ If you skip base-stack verification and start with add-ons immediately, troubles
 {
   "ability_name": "gmail/reply",
   "parameters": {
-    "thread_id": "abc123",
+    "message_id": "abc123",
     "body": "Thanks for the update!"
   }
 }
@@ -186,7 +210,7 @@ If you skip base-stack verification and start with add-ons immediately, troubles
 {
   "ability_name": "gmail/modify",
   "parameters": {
-    "id": "message123",
+    "message_id": "message123",
     "remove_labels": ["INBOX"]
   }
 }
