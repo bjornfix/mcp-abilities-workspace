@@ -3,7 +3,7 @@
  * Plugin Name: MCP Abilities - Google Workspace
  * Plugin URI: https://github.com/bjornfix/mcp-abilities-workspace
  * Description: Google Workspace Gmail API abilities for MCP. Service account only, inbox management, send/receive emails.
- * Version: 2.0.8
+ * Version: 2.0.9
  * Author: basicus
  * Author URI: https://profiles.wordpress.org/basicus/
  * License: GPL-2.0+

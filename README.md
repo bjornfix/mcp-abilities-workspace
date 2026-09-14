@@ -2,13 +2,13 @@
 
 Read a Google Workspace message, review its thread, and send an approved reply through the same Gmail mailbox from your WordPress-connected assistant.
 
-[![Release 2.0.8](https://img.shields.io/badge/release-2.0.8-blue.svg)](https://downloads.devenia.com/mcp-abilities-workspace.zip)
+[![Release 2.0.9](https://img.shields.io/badge/release-2.0.9-blue.svg)](https://downloads.devenia.com/mcp-abilities-workspace.zip)
 [![License: GPL v2](https://img.shields.io/badge/License-GPL%20v2-blue.svg)](https://www.gnu.org/licenses/gpl-2.0)
 [![WordPress](https://img.shields.io/badge/WordPress-6.9%2B-blue.svg)](https://wordpress.org)
 [![PHP](https://img.shields.io/badge/PHP-8.0%2B-purple.svg)](https://php.net)
 
-**Tested up to:** 7.0
-**Stable tag:** 2.0.8
+**Tested up to:** 7.1
+**Stable tag:** 2.0.9
 **License:** GPLv2 or later
 **Tags:** mcp, google-workspace, gmail, ai, automation
 
@@ -128,7 +128,7 @@ Download the [plugin ZIP](https://downloads.devenia.com/mcp-abilities-workspace.
 
 ## Changelog
 
-### 2.0.8
+### 2.0.9
 - Correct Gmail array query parameters, label filtering, and label list serialization.
 - Report failed message detail and mark-read requests instead of claiming success.
 - Preserve reply recipients and thread references; format UTF-8 mail with WordPress's MIME library.

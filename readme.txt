@@ -2,8 +2,8 @@
 Contributors: basicus
 Tags: mcp, google-workspace, gmail, ai, automation
 Requires at least: 6.9
-Tested up to: 7.0
-Stable tag: 2.0.8
+Tested up to: 7.1
+Stable tag: 2.0.9
 Requires PHP: 8.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
@@ -68,7 +68,7 @@ Sending, replying and mailbox changes take effect when called. Review the exact 
 
 == Changelog ==
 
-= 2.0.8 =
+= 2.0.9 =
 * Correct Gmail array query parameters, label filtering, and label list serialization.
 * Report failed message detail and mark-read requests instead of claiming success.
 * Preserve reply recipients and thread references; format UTF-8 mail with WordPress's MIME library.
