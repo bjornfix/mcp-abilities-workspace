@@ -3,7 +3,7 @@
  * Plugin Name: MCP Abilities - Google Workspace
  * Plugin URI: https://github.com/bjornfix/mcp-abilities-workspace
  * Description: Google Workspace Gmail API abilities for MCP. Service account only, inbox management, send/receive emails.
- * Version: 2.0.7
+ * Version: 2.0.8
  * Author: basicus
  * Author URI: https://profiles.wordpress.org/basicus/
  * License: GPL-2.0+
@@ -264,7 +264,13 @@ class MCP_Gmail_Client {
 
 		$url = self::API_BASE . '/users/me/' . ltrim( $endpoint, '/' );
 		if ( ! empty( $query ) ) {
-			$url = add_query_arg( $query, $url );
+			$pairs = array();
+			foreach ( $query as $key => $values ) {
+				foreach ( (array) $values as $value ) {
+					$pairs[] = rawurlencode( (string) $key ) . '=' . rawurlencode( (string) $value );
+				}
+			}
+			$url .= '?' . implode( '&', $pairs );
 		}
 
 		$args = array(
@@ -289,19 +295,19 @@ class MCP_Gmail_Client {
 		$code = wp_remote_retrieve_response_code( $response );
 		$body_raw = wp_remote_retrieve_body( $response );
 		$data = json_decode( $body_raw, true );
-		if ( null === $data && '' !== $body_raw ) {
-			$data = array( 'raw' => $body_raw );
+		if ( $code < 200 || $code >= 300 ) {
+			$error = is_array( $data ) ? ( $data['error'] ?? null ) : null;
+			$message = is_array( $error ) ? ( $error['message'] ?? 'API error' ) : $error;
+			$message = is_string( $message ) ? $message : 'API error';
+			return new WP_Error( 'api_error', "Gmail API error ($code): $message" );
 		}
-		if ( ! is_array( $data ) ) {
-			$data = array();
+		if ( 204 === $code && '' === trim( $body_raw ) ) {
+			return array();
 		}
-
-		if ( $code >= 400 ) {
-			$error = $data['error']['message'] ?? $data['error'] ?? 'API error';
-			return new WP_Error( 'api_error', "Gmail API error ($code): $error" );
+		if ( JSON_ERROR_NONE !== json_last_error() || ! is_array( $data ) ) {
+			return new WP_Error( 'invalid_api_response', 'Gmail API returned an invalid JSON response.' );
 		}
-
-		return $data ?? array();
+		return $data;
 	}
 
 	/**
@@ -316,13 +322,15 @@ class MCP_Gmail_Client {
 			'html' => '',
 		);
 
-		if ( isset( $payload['body']['data'] ) && ! empty( $payload['body']['data'] ) ) {
-			$mime_type = $payload['mimeType'] ?? 'text/plain';
-			$decoded = base64_decode( strtr( $payload['body']['data'], '-_', '+/' ) );
-			if ( str_contains( $mime_type, 'html' ) ) {
-				$result['html'] = $decoded;
-			} else {
-				$result['text'] = $decoded;
+		$disposition = self::get_header( $payload['headers'] ?? array(), 'Content-Disposition' );
+		if ( ! empty( $payload['filename'] ) || preg_match( '/^attachment(?:;|$)/i', trim( $disposition ) ) ) {
+			return $result;
+		}
+		if ( ! empty( $payload['body']['data'] ) ) {
+			$mime_type = strtolower( $payload['mimeType'] ?? 'text/plain' );
+			$decoded = base64_decode( strtr( $payload['body']['data'], '-_', '+/' ), true );
+			if ( false !== $decoded && in_array( $mime_type, array( 'text/plain', 'text/html' ), true ) ) {
+				$result[ 'text/html' === $mime_type ? 'html' : 'text' ] = $decoded;
 			}
 		}
 
@@ -357,40 +365,92 @@ class MCP_Gmail_Client {
 		return '';
 	}
 
-	/**
-	 * Create RFC 2822 formatted email for sending.
-	 *
-	 * @param string $to      Recipient.
-	 * @param string $subject Subject.
-	 * @param string $body    Body (HTML).
-	 * @param string $from    From address.
-	 * @param array  $headers Additional headers.
-	 * @return string Base64url encoded message.
-	 */
-	public static function create_message( string $to, string $subject, string $body, string $from, array $headers = array() ): string {
-		$boundary = 'boundary_' . wp_generate_password( 16, false );
-
-		$message = "From: $from\r\n";
-		$message .= "To: $to\r\n";
-		$message .= "Subject: $subject\r\n";
-		$message .= "MIME-Version: 1.0\r\n";
-		$message .= "Content-Type: multipart/alternative; boundary=\"$boundary\"\r\n";
-
-		foreach ( $headers as $key => $value ) {
-			$message .= "$key: $value\r\n";
-		}
-
-		$message .= "\r\n";
-		$message .= "--$boundary\r\n";
-		$message .= "Content-Type: text/plain; charset=UTF-8\r\n\r\n";
-		$message .= wp_strip_all_tags( $body ) . "\r\n";
-		$message .= "--$boundary\r\n";
-		$message .= "Content-Type: text/html; charset=UTF-8\r\n\r\n";
-		$message .= $body . "\r\n";
-		$message .= "--$boundary--";
-
-		return self::base64url_encode( $message );
+	/** Load WordPress's MIME formatter without creating a mail transport. */
+	private static function load_mailer(): void {
+		require_once ABSPATH . WPINC . '/PHPMailer/Exception.php';
+		require_once ABSPATH . WPINC . '/PHPMailer/PHPMailer.php';
 	}
+
+	/**
+	 * Parse a comma-separated mailbox list, preserving quoted display names.
+	 *
+	 * @param string $value Mailbox list.
+	 * @return array|WP_Error Parsed mailboxes or a validation error.
+	 */
+	public static function parse_mailboxes( string $value ) {
+		self::load_mailer();
+		if ( preg_match( '/[\r\n\x00]/', $value ) ) {
+			return new WP_Error( 'invalid_mailbox', 'Email headers must not contain line breaks.' );
+		}
+		$result = array();
+		$parts = preg_split( '/,(?=(?:[^"\\\\]*"[^"\\\\]*")*[^"\\\\]*$)/', $value );
+		foreach ( $parts as $part ) {
+			$part = trim( $part );
+			if ( '' === $part ) {
+				continue;
+			}
+			$name = '';
+			$address = $part;
+			if ( preg_match( '/^(.*?)<([^<>]+)>$/', $part, $match ) ) {
+				$name = trim( $match[1], " \"" );
+				$address = trim( $match[2] );
+			}
+			if ( ! \PHPMailer\PHPMailer\PHPMailer::validateAddress( $address ) ) {
+				return new WP_Error( 'invalid_mailbox', 'An email recipient is invalid.' );
+			}
+			$result[ strtolower( $address ) ] = array( 'address' => $address, 'name' => $name );
+		}
+		return $result;
+	}
+
+	/**
+	 * Create a UTF-8 MIME message. No mail is delivered by this method.
+	 *
+	 * @param string $to Recipient list.
+	 * @param string $subject Subject.
+	 * @param string $body HTML body.
+	 * @param string $from Sender address.
+	 * @param array $headers Additional headers.
+	 * @return string|WP_Error Base64url message or validation error.
+	 */
+	public static function create_message( string $to, string $subject, string $body, string $from, array $headers = array() ) {
+		self::load_mailer();
+		foreach ( array_merge( array( $to, $subject, $from ), array_keys( $headers ), array_values( $headers ) ) as $value ) {
+			if ( ! is_string( $value ) || preg_match( '/[\r\n\x00]/', $value ) ) {
+				return new WP_Error( 'invalid_email_header', 'Email headers must not contain line breaks.' );
+			}
+		}
+		try {
+			$mail = new \PHPMailer\PHPMailer\PHPMailer( true );
+			$mail->CharSet = 'UTF-8';
+			$mail->Encoding = 'quoted-printable';
+			$mail->setFrom( $from );
+			foreach ( array( 'To' => $to, 'Cc' => $headers['Cc'] ?? '', 'Bcc' => $headers['Bcc'] ?? '' ) as $kind => $list ) {
+				$addresses = self::parse_mailboxes( $list );
+				if ( is_wp_error( $addresses ) ) {
+					return $addresses;
+				}
+				$method = array( 'To' => 'addAddress', 'Cc' => 'addCC', 'Bcc' => 'addBCC' )[ $kind ];
+				foreach ( $addresses as $address ) {
+					$mail->$method( $address['address'], $address['name'] );
+				}
+			}
+			foreach ( $headers as $name => $value ) {
+				if ( ! in_array( $name, array( 'Cc', 'Bcc' ), true ) ) {
+					$mail->addCustomHeader( $name, $value );
+				}
+			}
+			$mail->Subject = $subject;
+			$mail->isHTML( true );
+			$mail->Body = $body;
+			$mail->AltBody = wp_strip_all_tags( $body );
+			$mail->preSend();
+			return self::base64url_encode( $mail->getSentMIMEMessage() );
+		} catch ( \PHPMailer\PHPMailer\Exception $error ) {
+			return new WP_Error( 'invalid_email', $error->getMessage() );
+		}
+	}
+
 }
 
 // =============================================================================
@@ -472,7 +532,7 @@ function mcp_register_email_abilities(): void {
 						);
 					}
 
-				if ( ! $service_account || empty( $service_account['client_email'] ) || empty( $service_account['private_key'] ) ) {
+				if ( ! is_array( $service_account ) || ! is_string( $service_account['client_email'] ?? null ) || ! filter_var( $service_account['client_email'], FILTER_VALIDATE_EMAIL ) || ! is_string( $service_account['private_key'] ?? null ) || '' === trim( $service_account['private_key'] ) ) {
 					return array(
 						'success' => false,
 						'message' => 'Invalid service account JSON structure. Required: client_email, private_key.',
@@ -495,7 +555,9 @@ function mcp_register_email_abilities(): void {
 					'configured_at'     => gmdate( 'Y-m-d H:i:s' ),
 				);
 
-				MCP_Gmail_Client::save_config( $config );
+				if ( ! MCP_Gmail_Client::save_config( $config ) && get_option( MCP_Gmail_Client::OPTION_NAME ) !== $config ) {
+					return array( 'success' => false, 'message' => 'The Gmail configuration could not be saved.' );
+				}
 
 				// Test the connection.
 				$token = MCP_Gmail_Client::get_access_token();
@@ -637,13 +699,7 @@ function mcp_register_email_abilities(): void {
 			),
 			'execute_callback'    => function ( $input = array() ): array {
 				$input = is_array( $input ) ? $input : array();
-				$query = array();
-
-				if ( ! empty( $input['types'] ) && is_array( $input['types'] ) ) {
-					$query['type'] = array_map( 'sanitize_text_field', $input['types'] );
-				}
-
-				$response = MCP_Gmail_Client::api_request( 'labels', 'GET', array(), $query );
+				$response = MCP_Gmail_Client::api_request( 'labels' );
 				if ( is_wp_error( $response ) ) {
 					return array(
 						'success' => false,
@@ -652,6 +708,12 @@ function mcp_register_email_abilities(): void {
 				}
 
 				$labels = $response['labels'] ?? array();
+				if ( ! empty( $input['types'] ) ) {
+					$types = (array) $input['types'];
+					$labels = array_values( array_filter( $labels, static function ( array $label ) use ( $types ): bool {
+						return in_array( $label['type'] ?? '', $types, true );
+					} ) );
+				}
 
 				return array(
 					'success' => true,
@@ -708,7 +770,7 @@ function mcp_register_email_abilities(): void {
 					);
 				}
 
-				$response = MCP_Gmail_Client::api_request( 'labels/' . $label_id );
+				$response = MCP_Gmail_Client::api_request( 'labels/' . rawurlencode( $label_id ) );
 				if ( is_wp_error( $response ) ) {
 					return array(
 						'success' => false,
@@ -912,7 +974,7 @@ function mcp_register_email_abilities(): void {
 					);
 				}
 
-				$response = MCP_Gmail_Client::api_request( 'labels/' . $label_id, 'PATCH', $body );
+				$response = MCP_Gmail_Client::api_request( 'labels/' . rawurlencode( $label_id ), 'PATCH', $body );
 				if ( is_wp_error( $response ) ) {
 					return array(
 						'success' => false,
@@ -973,7 +1035,7 @@ function mcp_register_email_abilities(): void {
 					);
 				}
 
-				$response = MCP_Gmail_Client::api_request( 'labels/' . $label_id, 'DELETE' );
+				$response = MCP_Gmail_Client::api_request( 'labels/' . rawurlencode( $label_id ), 'DELETE' );
 				if ( is_wp_error( $response ) ) {
 					return array(
 						'success' => false,
@@ -1088,13 +1150,15 @@ function mcp_register_email_abilities(): void {
 
 							// Get message metadata.
 							$detail = MCP_Gmail_Client::api_request(
-							'messages/' . $msg['id'],
+							'messages/' . rawurlencode( $msg['id'] ),
 							'GET',
 							array(),
 							array( 'format' => 'metadata', 'metadataHeaders' => array( 'From', 'To', 'Subject', 'Date' ) )
 						);
 
-						if ( ! is_wp_error( $detail ) ) {
+						if ( is_wp_error( $detail ) ) {
+							return array( 'success' => false, 'message' => 'Failed to get message details: ' . $detail->get_error_message() );
+						} else {
 							$headers = $detail['payload']['headers'] ?? array();
 							$messages[] = array(
 								'id'      => $msg['id'],
@@ -1266,7 +1330,7 @@ function mcp_register_email_abilities(): void {
 					);
 				}
 
-				$response = MCP_Gmail_Client::api_request( 'messages/' . $message_id, 'GET', array(), array( 'format' => 'full' ) );
+				$response = MCP_Gmail_Client::api_request( 'messages/' . rawurlencode( $message_id ), 'GET', array(), array( 'format' => 'full' ) );
 
 				if ( is_wp_error( $response ) ) {
 					return array(
@@ -1294,11 +1358,15 @@ function mcp_register_email_abilities(): void {
 
 				// Mark as read if requested.
 				if ( ! empty( $input['mark_read'] ) && in_array( 'UNREAD', $response['labelIds'] ?? array(), true ) ) {
-					MCP_Gmail_Client::api_request(
-						'messages/' . $message_id . '/modify',
+					$modified = MCP_Gmail_Client::api_request(
+						'messages/' . rawurlencode( $message_id ) . '/modify',
 						'POST',
 						array( 'removeLabelIds' => array( 'UNREAD' ) )
 					);
+					if ( is_wp_error( $modified ) ) {
+						return array( 'success' => false, 'email' => $email, 'message' => 'Email retrieved, but marking it read failed: ' . $modified->get_error_message() );
+					}
+					$email['labels'] = $modified['labelIds'] ?? array_values( array_diff( $email['labels'], array( 'UNREAD' ) ) );
 				}
 
 				return array(
@@ -1310,7 +1378,7 @@ function mcp_register_email_abilities(): void {
 			'permission_callback' => 'mcp_workspace_permission_callback',
 			'meta'                => array(
 				'annotations' => array(
-					'readonly'    => true,
+					'readonly'    => false,
 					'destructive' => false,
 					'idempotent'  => true,
 				),
@@ -1373,7 +1441,7 @@ function mcp_register_email_abilities(): void {
 					$query['metadataHeaders'] = array_map( 'sanitize_text_field', $input['metadata_headers'] );
 				}
 
-				$response = MCP_Gmail_Client::api_request( 'threads/' . $thread_id, 'GET', array(), $query );
+				$response = MCP_Gmail_Client::api_request( 'threads/' . rawurlencode( $thread_id ), 'GET', array(), $query );
 				if ( is_wp_error( $response ) ) {
 					return array(
 						'success' => false,
@@ -1450,7 +1518,7 @@ function mcp_register_email_abilities(): void {
 					);
 				}
 
-					$response = MCP_Gmail_Client::api_request( 'messages/' . $message_id . '/attachments/' . $attachment_id );
+					$response = MCP_Gmail_Client::api_request( 'messages/' . rawurlencode( $message_id ) . '/attachments/' . rawurlencode( $attachment_id ) );
 					if ( is_wp_error( $response ) ) {
 						return array(
 							'success' => false,
@@ -1568,6 +1636,10 @@ function mcp_register_email_abilities(): void {
 					$headers
 				);
 
+				if ( is_wp_error( $raw ) ) {
+					return array( 'success' => false, 'message' => $raw->get_error_message() );
+				}
+
 				$response = MCP_Gmail_Client::api_request(
 					'messages/send',
 					'POST',
@@ -1666,7 +1738,7 @@ function mcp_register_email_abilities(): void {
 
 				// Handle trash separately (different endpoint).
 				if ( ! empty( $input['trash'] ) ) {
-					$response = MCP_Gmail_Client::api_request( 'messages/' . $message_id . '/trash', 'POST' );
+					$response = MCP_Gmail_Client::api_request( 'messages/' . rawurlencode( $message_id ) . '/trash', 'POST' );
 					if ( is_wp_error( $response ) ) {
 						return array(
 							'success' => false,
@@ -1711,13 +1783,13 @@ function mcp_register_email_abilities(): void {
 
 				$body = array();
 				if ( ! empty( $add_labels ) ) {
-					$body['addLabelIds'] = array_unique( $add_labels );
+					$body['addLabelIds'] = array_values( array_unique( $add_labels ) );
 				}
 				if ( ! empty( $remove_labels ) ) {
-					$body['removeLabelIds'] = array_unique( $remove_labels );
+					$body['removeLabelIds'] = array_values( array_unique( $remove_labels ) );
 				}
 
-				$response = MCP_Gmail_Client::api_request( 'messages/' . $message_id . '/modify', 'POST', $body );
+				$response = MCP_Gmail_Client::api_request( 'messages/' . rawurlencode( $message_id ) . '/modify', 'POST', $body );
 
 				if ( is_wp_error( $response ) ) {
 					return array(
@@ -1803,10 +1875,10 @@ function mcp_register_email_abilities(): void {
 
 				// Get original message to extract reply info.
 				$original = MCP_Gmail_Client::api_request(
-					'messages/' . $message_id,
+					'messages/' . rawurlencode( $message_id ),
 					'GET',
 					array(),
-					array( 'format' => 'metadata', 'metadataHeaders' => array( 'From', 'To', 'Cc', 'Subject', 'Message-ID' ) )
+					array( 'format' => 'metadata', 'metadataHeaders' => array( 'From', 'Reply-To', 'To', 'Cc', 'Subject', 'Message-ID', 'References' ) )
 				);
 
 				if ( is_wp_error( $original ) ) {
@@ -1822,7 +1894,7 @@ function mcp_register_email_abilities(): void {
 				$original_message_id = MCP_Gmail_Client::get_header( $headers, 'Message-ID' );
 
 				// Determine reply recipient.
-				$to = $original_from;
+				$to = MCP_Gmail_Client::get_header( $headers, 'Reply-To' ) ?: $original_from;
 
 				// Build subject with Re: prefix.
 				$subject = $original_subject;
@@ -1834,15 +1906,20 @@ function mcp_register_email_abilities(): void {
 				$reply_headers = array();
 				if ( ! empty( $original_message_id ) ) {
 					$reply_headers['In-Reply-To'] = $original_message_id;
-					$reply_headers['References'] = $original_message_id;
+					$reply_headers['References'] = trim( MCP_Gmail_Client::get_header( $headers, 'References' ) . ' ' . $original_message_id );
 				}
 
-				// Handle reply-all.
+				// Add original To/Cc recipients once, excluding this mailbox and direct recipients.
 				if ( ! empty( $input['reply_all'] ) ) {
-					$original_to = MCP_Gmail_Client::get_header( $headers, 'To' );
-					$original_cc = MCP_Gmail_Client::get_header( $headers, 'Cc' );
-					if ( ! empty( $original_cc ) ) {
-						$reply_headers['Cc'] = $original_cc;
+					$direct = MCP_Gmail_Client::parse_mailboxes( $to );
+					$copies = MCP_Gmail_Client::parse_mailboxes( MCP_Gmail_Client::get_header( $headers, 'To' ) . ',' . MCP_Gmail_Client::get_header( $headers, 'Cc' ) );
+					if ( is_wp_error( $direct ) || is_wp_error( $copies ) ) {
+						return array( 'success' => false, 'message' => 'The original message contains invalid recipients.' );
+					}
+					unset( $copies[ strtolower( $config['impersonate_email'] ) ] );
+					$copies = array_diff_key( $copies, $direct );
+					if ( ! empty( $copies ) ) {
+						$reply_headers['Cc'] = implode( ', ', array_column( $copies, 'address' ) );
 					}
 				}
 
@@ -1853,6 +1930,10 @@ function mcp_register_email_abilities(): void {
 					$config['impersonate_email'],
 					$reply_headers
 				);
+
+				if ( is_wp_error( $raw ) ) {
+					return array( 'success' => false, 'message' => $raw->get_error_message() );
+				}
 
 				$response = MCP_Gmail_Client::api_request(
 					'messages/send',

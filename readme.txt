@@ -3,7 +3,7 @@ Contributors: basicus
 Tags: mcp, google-workspace, gmail, ai, automation
 Requires at least: 6.9
 Tested up to: 7.0
-Stable tag: 2.0.7
+Stable tag: 2.0.8
 Requires PHP: 8.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
@@ -16,6 +16,8 @@ This add-on plugin provides Gmail API integration through MCP (Model Context Pro
 Personal Gmail accounts are not supported; you need Google Workspace with domain-wide delegation.
 
 Part of the [MCP Expose Abilities](https://devenia.com/plugins/mcp-expose-abilities/) ecosystem.
+
+Sending, replying and mailbox changes take effect when called. Review the exact action in your assistant first; this plugin has no separate approval screen. It covers Gmail, not Drive, Calendar or Docs. All abilities require manage_options, and the configured service account credentials are stored in WordPress options.
 
 = Requirements =
 
@@ -31,15 +33,15 @@ Part of the [MCP Expose Abilities](https://devenia.com/plugins/mcp-expose-abilit
 
 **gmail/send / gmail/reply** - Send new mail and reply inside existing threads.
 
-**gmail/modify / gmail/list-labels / gmail/create-label / gmail/update-label / gmail/delete-label** - Manage labels and archive/read state.
+**gmail/modify / gmail/get-label / gmail/list-labels / gmail/create-label / gmail/update-label / gmail/delete-label** - Manage labels and archive/read state.
 
-**gmail/get-attachment / email/send** - Fetch Gmail attachments or fall back to WordPress mail when needed.
+**gmail/get-attachment / email/send** - Fetch Gmail attachments or send separately through the WordPress mail transport.
 
 = Use Cases =
 
 * Triage a shared support inbox through MCP
 * Reply to invoice or refund emails inside the correct Gmail thread
-* Label and archive handled messages automatically
+* Apply agreed labels and archive reviewed messages
 * Read recent unread messages before drafting a response
 * Manage Google Workspace mailboxes without opening Gmail
 
@@ -60,11 +62,17 @@ Part of the [MCP Expose Abilities](https://devenia.com/plugins/mcp-expose-abilit
 
 = Links =
 
-* [Plugin Page](https://devenia.com/plugins/mcp-expose-abilities/)
+* [Plugin Page](https://devenia.com/plugins/mcp-abilities-workspace/)
 * [Core Plugin (MCP Expose Abilities)](https://github.com/bjornfix/mcp-expose-abilities)
 * [All Add-on Plugins](https://devenia.com/plugins/mcp-expose-abilities/#add-ons)
 
 == Changelog ==
+
+= 2.0.8 =
+* Correct Gmail array query parameters, label filtering, and label list serialization.
+* Report failed message detail and mark-read requests instead of claiming success.
+* Preserve reply recipients and thread references; format UTF-8 mail with WordPress's MIME library.
+* Reject unsafe mail headers, validate credential field types, and keep attachment data out of message text.
 
 = 2.0.7 =
 * Update tested WordPress version metadata for Plugin Check.
