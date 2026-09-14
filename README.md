@@ -1,6 +1,6 @@
 # MCP Abilities - Google Workspace
 
-Read a Google Workspace message, review its thread, and send an approved reply through the same Gmail mailbox from your WordPress-connected assistant.
+Give the AI assistant you use with WordPress access to your Workspace email. Ask it to find a message, read the conversation and prepare a reply, without copying emails into chat or pasting answers back into Gmail.
 
 [![Release 2.0.9](https://img.shields.io/badge/release-2.0.9-blue.svg)](https://downloads.devenia.com/mcp-abilities-workspace.zip)
 [![License: GPL v2](https://img.shields.io/badge/License-GPL%20v2-blue.svg)](https://www.gnu.org/licenses/gpl-2.0)
@@ -28,6 +28,8 @@ Despite its name, this add-on covers Gmail. It does not provide Google Drive, Ca
 For example: “Find unread messages in the support mailbox about order EX-104. Read the matching thread and draft a reply for my review.” Your assistant owns that review step; the plugin supplies the mailbox operations.
 
 ## Why This Feels Different
+
+WordPress hosts the Gmail connection, and your assistant uses it to retrieve the background it needs. If you already manage your website through WordPress MCP, the add-on puts mailbox tools in the same assistant. If your assistant already has a Gmail connection that meets your needs, this add-on may be unnecessary.
 
 The reply uses the original Gmail thread ID and message references. It follows Reply-To when present. Explicit reply-all adds original To and Cc recipients while excluding the configured mailbox from the added copies. The assistant can inspect context and change the same message through named operations, without copying a conversation between separate tools.
 
