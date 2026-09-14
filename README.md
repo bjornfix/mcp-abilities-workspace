@@ -1,6 +1,6 @@
 # MCP Abilities - Google Workspace
 
-Give the AI assistant you use with WordPress access to your Workspace email. Ask it to find a message, read the conversation and prepare a reply, without copying emails into chat or pasting answers back into Gmail.
+Give different AI assistants one shared connection to your Workspace mailbox. Connect Google Workspace to WordPress once, then let authorised MCP-compatible assistants find messages, read conversations and send replies. Choose the assistant that suits the task without rebuilding the Gmail integration.
 
 [![Release 2.0.9](https://img.shields.io/badge/release-2.0.9-blue.svg)](https://downloads.devenia.com/mcp-abilities-workspace.zip)
 [![License: GPL v2](https://img.shields.io/badge/License-GPL%20v2-blue.svg)](https://www.gnu.org/licenses/gpl-2.0)
@@ -29,7 +29,9 @@ For example: “Find unread messages in the support mailbox about order EX-104. 
 
 ## Why This Feels Different
 
-WordPress hosts the Gmail connection, and your assistant uses it to retrieve the background it needs. If you already manage your website through WordPress MCP, the add-on puts mailbox tools in the same assistant. If your assistant already has a Gmail connection that meets your needs, this add-on may be unnecessary.
+WordPress hosts one Gmail integration that several authorised MCP-compatible assistants can use. Ask one to investigate a long customer exchange, another to help write a clear reply, or the assistant working on your website to find a customer email. Each assistant needs its own authorised WordPress access; the Google service account configuration stays in one place.
+
+The shared resource is the same configured mailbox and its operations. Private assistant chat history is not transferred, and the plugin does not coordinate work between assistants. If one assistant’s existing Gmail connection covers all your needs, the additional integration may add little.
 
 The reply uses the original Gmail thread ID and message references. It follows Reply-To when present. Explicit reply-all adds original To and Cc recipients while excluding the configured mailbox from the added copies. The assistant can inspect context and change the same message through named operations, without copying a conversation between separate tools.
 
@@ -38,12 +40,13 @@ The reply uses the original Gmail thread ID and message references. It follows R
 | Task | Manual hand-off | With these abilities |
 |---|---|---|
 | Find context | Copy messages into an assistant | Search and retrieve the selected thread |
+| Change assistants | Set up another Gmail integration | Authorise a compatible assistant to use the shared connection |
 | Reply | Paste approved text back into Gmail | Send the approved text through `gmail/reply` |
 | Close the task | Return to Gmail to apply labels | Change the exact message's labels and verify them |
 
 ## Who It Is For
 
-Teams with a Google Workspace mailbox and an authenticated WordPress MCP setup can use this for reviewed support correspondence, message research, and mailbox organisation. A Workspace administrator must authorise domain-wide delegation. It is not a personal Gmail connector or a multi-mailbox dashboard.
+Teams using several AI assistants, or already working with WordPress MCP, can use a common mailbox connection for reviewed support correspondence, message research, and mailbox organisation. A Workspace administrator must authorise domain-wide delegation. It is not a personal Gmail connector or a multi-mailbox dashboard.
 
 ## Requirements
 
