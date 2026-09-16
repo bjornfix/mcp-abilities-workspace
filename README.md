@@ -2,13 +2,13 @@
 
 Give different AI assistants one shared connection to your Workspace mailbox. Connect Google Workspace to WordPress once, then let authorised MCP-compatible assistants find messages, read conversations and send replies. Choose the assistant that suits the task without rebuilding the Gmail integration.
 
-[![Release 2.0.9](https://img.shields.io/badge/release-2.0.9-blue.svg)](https://downloads.devenia.com/mcp-abilities-workspace.zip)
+[![Release 2.0.10](https://img.shields.io/badge/release-2.0.10-blue.svg)](https://downloads.devenia.com/mcp-abilities-workspace.zip)
 [![License: GPL v2](https://img.shields.io/badge/License-GPL%20v2-blue.svg)](https://www.gnu.org/licenses/gpl-2.0)
 [![WordPress](https://img.shields.io/badge/WordPress-6.9%2B-blue.svg)](https://wordpress.org)
 [![PHP](https://img.shields.io/badge/PHP-8.0%2B-purple.svg)](https://php.net)
 
 **Tested up to:** 7.1
-**Stable tag:** 2.0.9
+**Stable tag:** 2.0.10
 **License:** GPLv2 or later
 **Tags:** mcp, google-workspace, gmail, ai, automation
 
@@ -129,9 +129,17 @@ Every ability requires `manage_options`. Gmail calls use the configured Workspac
 
 ## Installation
 
+
+For update notifications in WordPress, install [Devenia MCP Updater](https://downloads.devenia.com/devenia-mcp-updater.zip). The updater is optional. You choose which plugins update automatically through WordPress.
+
 Download the [plugin ZIP](https://downloads.devenia.com/mcp-abilities-workspace.zip). In WordPress, open Plugins → Add New → Upload Plugin, select the ZIP, install, and activate it. Complete the Start Here steps before using Gmail abilities.
 
 ## Changelog
+
+
+### 2.0.10
+
+Add one dismissible Plugins-screen reminder when Devenia MCP Updater is missing or inactive, with persistent install or activate links. Automatic updates remain your choice in WordPress.
 
 ### 2.0.9
 - Correct Gmail array query parameters, label filtering, and label list serialization.
